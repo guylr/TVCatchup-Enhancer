@@ -2,7 +2,8 @@
 // @name           TVCatchup Enhancer
 // @namespace      http://www.networkg3.com/gmscripts
 // @description    Adds various features to TVCatchup's website
-// @version        0.9.8.4
+// @version        0.9.9
+// @history        0.9.9 Added reminders, fixed updates(should work on Firefox and Chrome), graphics updated
 // @history        0.9.8.4 Image location changed, etc
 // @history        0.9.8.3 Image location changed which made the script not work, fixed
 // @history        0.9.8.2 Fixed Opera's display bug, where the time was vertical
@@ -18,8 +19,10 @@
 // @history        0.9 Initial release
 // @include        http://tvcatchup.com/guide.html*
 // @include        http://www.tvcatchup.com/guide.html*
-// @require        http://userscripts.org/scripts/source/57756.user.js
+// @include        http://tvcatchup.com/watch.html?c=*
+// @include        http://www.tvcatchup.com/watch.html?c=*
 // ==/UserScript==
+
 (function (){
 
 const defaultColor = '9CEF4A';
@@ -51,18 +54,47 @@ var prefs = [];
 		"type" : "checkbox",
 		"defaultt" : true
 	};
-	
-if ((typeof GM_getValue == 'undefined') || (GM_getValue('a', 'b') == undefined)) {
+	prefs['reminder'] = {
+		"DisplayName" : "Enable reminders:",
+		"name" : "reminder",
+		"type" : "checkbox",
+		"defaultt" : true
+	};
 
+
+function ev(xpa){
+	var snapLink = document.evaluate(xpa, document, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
+    return (snapLink.snapshotLength>0)?snapLink:null;
+}
+function formatTime(time){return(time<10)?'0'+time:time;} // 9 => 09
+/*http://blog.stevenlevithan.com/archives/faster-trim-javascript*/
+function trim (str) {
+	var	str = str.replace(/^\s\s*/, ''),
+		ws = /\s/,
+		i = str.length;
+	while (ws.test(str.charAt(--i)));
+	return str.slice(0, i + 1);
+}
+function getElementByClass(theClass) {
+	var allHTMLTags=document.body.getElementsByTagName('div');
+	for (i=0; i<allHTMLTags.length; i++)
+		if (allHTMLTags[i].className==theClass)
+			return allHTMLTags[i];
+}
+
+
+////console.debug(GM_getValue.toString());
+if ((typeof GM_getValue == 'undefined') || (GM_getValue.toString && GM_getValue.toString().indexOf("not supported")!==-1) || (GM_getValue('a', 'b') == undefined)) {
+    
 	GM_setValue = function(name, value) {
 		value = (typeof value)[0] + value;
-		localStorage.setItem(PREFIX+name, value);
+		window.localStorage.setItem(PREFIX+name, value);
 	}
 
 	GM_deleteValue = function(name) {
-		localStorage.removeItem(PREFIX+name);
+		window.localStorage.removeItem(PREFIX+name);
 	}
-
+    
 	GM_getValue = function(name, defaultValue) {
 		var value = localStorage.getItem(PREFIX+name);
 		var charr;
@@ -79,7 +111,7 @@ if ((typeof GM_getValue == 'undefined') || (GM_getValue('a', 'b') == undefined))
 			return value;
 		}
 	}
-
+    
 	GM_addStyle = function(css){
 		var pa= document.getElementsByTagName('head')[0] ;
 		var el= document.createElement('style');
@@ -89,196 +121,449 @@ if ((typeof GM_getValue == 'undefined') || (GM_getValue('a', 'b') == undefined))
 		else el.appendChild(document.createTextNode(css));// others
 		pa.appendChild(el);
 	}
-	
+}
+
+var Prefrences = {
+    savePrefs: function(obj){
+        var x, child;
+        for(x=0;x<obj.children.length;x++){
+            child = obj.children[x];
+            //console.debug(child);
+            if(child.nodeName == 'INPUT'){
+                switch(child.type){
+                    case 'text':
+                        if(GM_getValue(child.id, prefs[child.id].defaultt)!=child.value)
+                            GM_setValue(child.id, child.value);
+                        break;
+                    case 'checkbox':
+                        if(GM_getValue(child.id, prefs[child.id].defaultt)!=child.checked)
+                            GM_setValue(child.id, child.checked);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        window.location = window.location.href; //reload page
+    },
+    
+    printPrefs: function(def){
+        var temp = ' ';
+        var realValue, x;
+        //if(prefs.length>0){
+            for (x in prefs){
+                realValue = GM_getValue(prefs[x].name, prefs[x].defaultt);
+                temp += '<label for="'+prefs[x].name+'">'+prefs[x].DisplayName+'</label><input id="'+prefs[x].name+'" type="'+prefs[x].type+'"';
+                switch(prefs[x].type){
+                    case 'text':
+                        temp += ' value="'+realValue+'" maxlength="'+ prefs[x].size +'" size="'+ prefs[x].size +'" /><br />';
+                        break;
+                    case 'checkbox':
+                        realValue = (realValue===true) ? 'checked="checked" ' : '';
+                        temp += ' value="'+prefs[x].name+'" '+realValue+'/><br />';
+                        break;
+                    default:
+                        temp += ' />';
+                        break;
+                }
+            }
+        //}
+        return temp;
+    },
+    /*
+
+    <div id="title">TVCatchup Enhancer is outdated</div>\
+     <div id="content">\
+         <p>A new version of TVCatchup Enhancer has been released. Please update the script.</p>\
+         <p><b>New version: </b> ' + cvers + '</p>\
+         <p><b>Your current version: </b> '+Updater.curVersion+'</p>\
+         <p><b>Version History:</b><br>\
+             ' + history + '\
+         </p>\
+     </div>\
+     <div id="buttons"><a id="'+PREFIX+'u_update">Update</a> <a id="'+PREFIX+'u_dismiss">Dismiss</a></div>
+     */
+    
+    openPrefs: function(){
+        if(!(document.getElementById(PREFIX+'o_container'))){
+            var myDiv = document.createElement('div');
+            myDiv.id = PREFIX+'o_container';
+            myDiv.className = 'nround_border nborder_box';
+            myDiv.innerHTML = '<div class="nround_border ncontainer"><div class="nround_border title">TVCatchup Script Preferences</div>\
+                               <div class="content"><b>Script homepage:</b> <a href="http://userscripts.org/scripts/show/' + Updater.id + '">http://userscripts.org/scripts/show/' + Updater.id + '</a><br/>'+Prefrences.printPrefs()+'\
+                               <div class="buttons"><a class="button_important '+PREFIX+'pointer" id="savePrefs">Save</a> <a class="'+PREFIX+'pointer" id="closePrefs">Close</a></div></div></div>';
+            document.body.appendChild(myDiv);
+            
+            document.getElementById('savePrefs').addEventListener("click", function (){Prefrences.savePrefs(this.parentNode.parentNode)}, false);
+            document.getElementById('closePrefs').addEventListener("click", function (){Prefrences.closePrefs(this.parentNode.parentNode)}, false);
+        }else{
+            Prefrences.closePrefs();
+        }
+    },
+
+    closePrefs: function(){
+        var chldDiv = document.getElementById(PREFIX+'o_container');
+        document.body.removeChild(chldDiv);
+    }
+};
+
+var Updater = {
+    id: 84836,
+    curVersion: '0.9.9',
+    lastUpdate: parseInt(GM_getValue('intLastUpdate', '1310000000')),
+    updateEveryHours: 72,
+    d: new Date(),
+    checkForUpdate: function () {
+        //console.debug('Last update since: %d', (Updater.d.getTime() / 1000 - Updater.lastUpdate));
+        if ((Updater.d.getTime() / 1000 - Updater.lastUpdate) > (60 * 60 * Updater.updateEveryHours)) {
+            //we need to update
+            //console.debug('We are going to update.');
+            Updater.Update();
+        }
+    },
+    Update: function () {
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: "http://userscripts.org/scripts/source/" + Updater.id + ".meta.js",
+            headers: {
+                /*"User-agent": "Mozilla/5.0",*/
+                "Accept": "text/html"
+            },
+            onload: function (response) {
+                //console.debug('Response(%s): %d', Updater.id, response.status);
+                if (response.status == 200 && !response.reponseText)
+                    Updater.parseUpdateResponse(response.responseText);
+            }
+        });
+    },
+    parseUpdateResponse: function (response) {
+        var history = response.match(/\@history\s+([\d.-]+\s+.*)/gi);
+        var version = response.match(/\@version\s+([\d.-]+)/i);
+        version = version[1];
+        history = history.join("<br>\n");
+        history = history.replace(/\@history\s+/gi, '');
+        //console.debug('Version: %s', version);
+        //console.debug('History: %s', history);
+
+
+        Updater.lastUpdate = Updater.d.getTime() / 1000;
+        GM_setValue('intLastUpdate', Updater.lastUpdate.toString());
+        //console.debug(Updater.lastUpdate);
+        if (Updater.curVersion != version)
+            Updater.displayUpdateBox(version, history);
+    },
+    displayUpdateBox: function (cvers, history) {
+        var div = document.createElement('div');
+        div.id = PREFIX+'u_container';
+        div.className = 'nround_border nborder_box';
+        div.innerHTML = '<div class="nround_border ncontainer"><div class="nround_border title">TVCatchup Enhancer is outdated</div>\
+                         <div class="content">\
+                             <p>A new version of TVCatchup Enhancer has been released. <br/> Please update the script. <br/>\
+                             <b>Script homepage:</b> <a href="http://userscripts.org/scripts/show/' + Updater.id + '">http://userscripts.org/scripts/show/' + Updater.id + '</a></p>\
+                             <p><b>New version: </b> <span class="gray">' + cvers + '</span></p>\
+                             <p><b>Your current version: </b> <span class="gray">'+Updater.curVersion+'</span></p>\
+                             <p><b>Version History:</b><br><span class="gray">\
+                                 ' + history + '\
+                             </span></p>\
+                         <div class="buttons"><a class="button_important '+PREFIX+'pointer" id="'+PREFIX+'u_update">Update</a> <a class="'+PREFIX+'pointer" id="'+PREFIX+'u_dismiss">Dismiss</a></div></div> </div>';
+
+        document.body.appendChild(div);
+        document.getElementById(PREFIX+'u_update').addEventListener("click", function () { document.body.removeChild(document.getElementById(PREFIX+'u_container')); window.location = "http://userscripts.org/scripts/source/" + Updater.id + ".user.js"; }, false);
+        document.getElementById(PREFIX+'u_dismiss').addEventListener("click", function () { document.body.removeChild(document.getElementById(PREFIX+'u_container')); }, false);
+        //document.body.innerHTML += '<div id="'+PREFIX+'boxPrefs">Test</div>';
+        //console.debug('Displaying update box.');
+    }
+};
+
+var bTimeLeft = GM_getValue('timeLeft', prefs['timeLeft'].defaultt);
+var bImdbLink = GM_getValue('imdbLink', prefs['imdbLink'].defaultt);
+var bRedLine = GM_getValue('redLine', prefs['redLine'].defaultt);
+var strTextColor = GM_getValue('textColor', prefs['textColor'].defaultt);
+var bReminder = GM_getValue('reminder', prefs['reminder'].defaultt);
+//var jsonReminder = JSON.parse(GM_getValue('strReminder', '{"Reminders":[]}'));
+////console.debug(JSON.stringify(jsonReminder));
+//console.debug(bImdbLink);
+var d = new Date();
+var curTime = d.getTime();
+var strLoc = document.location.href.toString();
+
+
+GM_addStyle('.nround_border{-moz-border-radius:6px;-webkit-border-radius:6px;-khtml-border-radius:6px;border-radius:6px;}\
+.nborder_box{text-align:left;color:#444;left:50%;top:10px;position:fixed;width:450px;height:auto;min-height:100px;margin-left:-200px;background:rgba(255,255,255,0.1);z-index:9999;font-family: "Helvetica Neue",Arial,Helvetica,Geneva,sans-serif;font-size:14px;-moz-background-clip:padding;-webkit-background-clip:padding;background-clip:padding-box;border:4px solid rgba(255,255,255,0.1);}\
+.ncontainer{background:#1f1f1f;width:450px;height:auto;}\
+.ncontainer .title{font-size:15px;text-align:center;min-height:30px;width:100%;padding:6px 0 2px 0;font-weight:bold;text-shadow:1px 1px 0px #000;color:#fff;background:url(http://i.imgur.com/HhtzI.png) repeat-x;}\
+.ncontainer .content{width:422px;min-height:100px;overflow:auto;padding:10px;color:#fff;line-height:1.5;}\
+.ncontainer .content a{color:#84f125; text-decoration:none;}\
+.ncontainer .content p{margin-bottom:10px;}\
+.ncontainer .content b{font-weight:bold;}\
+.ncontainer .buttons{width:100%; height:100%; text-align:right;}\
+.ncontainer .buttons a{text-decoration:none; color:#fff; padding:10px;}\
+.ncontainer .buttons a:hover{color:#ccc;}\
+.ncontainer .button_important{background:#d6481f url(http://i.imgur.com/HhtzI.png) repeat-x; padding:6px 15px 6px 15px !important;}\
+.ncontainer .gray{color:#b7b7b7;}\
+.ncontainer input[type=\'checkbox\']{float:right;}\
+.ncontainer input[type=\'text\']{float:right;}\
+.ncontainer label{margin-top:10px;}\
+\
+.'+PREFIX+'custlink{color:#'+strTextColor+';}\
+.'+PREFIX+'custlink a{color:#'+strTextColor+';}\
+.'+PREFIX+'custlink a:hover{color:#fff;}\
+.'+PREFIX+'reminder{color:#5c5c5c;}\
+.'+PREFIX+'reminder_active{color:#de696f;}\
+.'+PREFIX+'pointer{cursor:pointer;}\
+.'+PREFIX+'pointer:hover{color:#fff;}\
+.'+PREFIX+'reminder_close{cursor:pointer; float:right; margin:4px 5px 5px 0; width:10px; height:11px; \
+                    background-image: url(http://i.imgur.com/r3A2O.png);}\
+.'+PREFIX+'reminder_container{width:100%; height:100%; background-color:#ed3b19; color:#fff; padding:5px 0 5px 0; \
+                        text-shadow: 1px 1px 0px #832817; border-top:4px solid #000; font-style:italic;}\
+.'+PREFIX+'reminder_container a{color:#ffffa6;}\
+.'+PREFIX+'reminder_container a:hover{color:#fff;}');
+
+
+ var Reminder = {
+    jsonReminder: JSON.parse(GM_getValue('strReminder', '{"Reminders":[]}')),
+    REMINDER_BACK: 'http://i.imgur.com/qiFTI.png',
+
+    addReminderLink: function(ob){
+        if(ob.children[1].textContent.length > 0){
+            var timeStart = parseInt(ob.children[4].textContent);
+            if(timeStart>curTime/1000){ //check if the show already has aired
+                var channelId = ob.children[3].textContent;
+
+                divTemp = document.createElement('div');
+                divTemp.innerHTML += '[R]';
+                divTemp.addEventListener("click", Reminder.remind, false);
+                ob.appendChild(divTemp);
+
+                var posReminders = Reminder.inReminders(channelId, timeStart);
+                if(posReminders!==false)
+                    Reminder.styleSelected(ob);
+                else
+                    Reminder.styleNormal(ob);
+            }
+        }
+    },
+    remind: function(){
+        var ob = this.parentNode;
+        var channelName;
+        if(ob.className == 'line') channelName = ob.parentNode.parentNode.parentNode.children[0].children[0].title;
+        else channelName = ob.parentNode.parentNode.children[0].children[0].title;
+        var timeStart = parseInt(ob.children[4].textContent);
+        var show = ob.children[0].textContent;
+        var channelId = ob.children[3].textContent;
+
+        var posReminders = Reminder.inReminders(channelId, timeStart);
+
+        if(posReminders !== false){
+            //reminder already exists, so we delete it?
+            //console.debug('%d: %s, %s', posReminders, channelName, timeStart);
+
+            Reminder.styleNormal(ob);
+
+            remndr.removeReminderAtPos(posReminders);
+            //console.debug(JSON.stringify(Reminder.jsonReminder));
+        }else{
+            //console.debug('%s, %s, %s, %s', channelName, channelId, show, timeStart);
+
+            Reminder.styleSelected(ob);
+
+            Reminder.jsonReminder.Reminders.push({"time" : timeStart, "show" : show, "channelName" : channelName,
+                "channelId" : channelId});
+            Reminder.saveReminders();
+            //console.debug(JSON.stringify(Reminder.jsonReminder));
+        }
+
+    },
+    styleNormal: function(ob) {
+        Reminder.setReminderBack(ob, 'background:none;');
+        ob.children[6].setAttribute('class', 'subtitle '+PREFIX+'reminder '+PREFIX+'pointer');
+    },
+    styleSelected: function(ob) {
+        Reminder.setReminderBack(ob, 'background:url('+Reminder.REMINDER_BACK+') repeat-x;');
+        ob.children[6].setAttribute('class', 'subtitle '+PREFIX+'reminder_active '+PREFIX+'pointer');
+    },
+    removeStartedReminders: function(){
+        for (var i = Reminder.jsonReminder.Reminders.length-1; i >= 0; i--) {
+            //console.debug('%s, %s, %s', (parseInt(Reminder.jsonReminder.Reminders[i].time) < curTime/1000),Reminder.jsonReminder.Reminders[i].time,curTime/1000);
+            if(Reminder.jsonReminder.Reminders[i].time < curTime/1000)
+                remndr.removeReminderAtPos(i);
+        }
+        Reminder.saveReminders();
+    },
+    inReminders: function(channelId, timeStart){
+        for (var i = 0; i < Reminder.jsonReminder.Reminders.length; i++) {
+            ////console.debug('%s, %s', channelName, (jsonReminder.Reminders[i].time == timeStart && jsonReminder.Reminders[i].channelName == channelName));
+            if(Reminder.jsonReminder.Reminders[i].time == timeStart && Reminder.jsonReminder.Reminders[i].channelId == channelId)
+                return i;
+        }
+        return false;
+    },
+    setReminderBack: function(ob, css){
+        if(ob.className == 'line'){
+            ob.parentNode.style.cssText += css;
+        }else{
+            ob.style.cssText += css;
+        }
+    },
+    scheduleReminder: function(){
+        for (var i = remndr.jsonReminder.Reminders.length-1; i >= 0; i--){
+            //console.debug(i)
+            var tout = parseInt((remndr.jsonReminder.Reminders[i].time-(curTime/1000))*1000-60000);
+            if(tout>0){
+                //console.debug('Setting timeout for %s (watch.html?c=%s) at %d', remndr.jsonReminder.Reminders[i].show,
+                //                                                                remndr.jsonReminder.Reminders[i].channelId, tout);
+
+                //window.setTimeout(function(j){showReminder(jsonReminder.Reminders[j]);}(i), 1000+i*100);
+                window.setTimeout(remndr.showReminder, tout, remndr.jsonReminder.Reminders[i]);
+            }else{
+                if(strLoc.indexOf('watch.html?c='+remndr.jsonReminder.Reminders[i].channelId)===-1){
+                    //console.debug('<=0 so, showing reminder, %d', tout);
+                    remndr.showReminder(remndr.jsonReminder.Reminders[i]);
+                }else{
+                    remndr.removeReminderAtPos(i);;
+                }
+            }
+        }
+    },
+    showReminder: function(ob){
+        if(strLoc.indexOf('watch.html?c='+ob.channelId)===-1){
+            var quality = strLoc.match(/_lq|_hq/g);
+            var ihtml = 'Reminder: <a href="/watch.html?c='+ob.channelId+((quality)?quality:'')+'">'+ob.show+' on '+ob.channelName+
+                        ((((ob.time-(curTime/1000))*1000)<0) ?
+                            ' has already started.' :
+                            ' is starting in one minute.')+
+                        ' &rarr;</a>';
+
+            var reminderDiv = document.createElement('div');
+            reminderDiv.innerHTML = ihtml;
+            reminderDiv.className = PREFIX+'reminder_container';
+
+            var closeLink = document.createElement('a');
+            closeLink.className = PREFIX+'reminder_close';
+            closeLink.addEventListener("click", function (){ reminderDiv.style.display = 'none'; }, false);
+            reminderDiv.appendChild(closeLink);
+
+            var container = document.getElementById('InSkinContainer_myInSkin1');
+            container.parentNode.insertBefore(reminderDiv, container);
+        }
+
+        for (var i = 0; i < Reminder.jsonReminder.Reminders.length; i++) {
+            if(Reminder.jsonReminder.Reminders[i].time == ob.time && Reminder.jsonReminder.Reminders[i].channelId == ob.channelId){
+                //console.debug('Removing element at: '+i);
+                Reminder.removeReminderAtPos(i);
+                return;
+            }
+        }
+    },
+    removeReminderAtPos: function(i){
+        Reminder.jsonReminder.Reminders.splice(i,1);
+        Reminder.saveReminders();
+    },
+    saveReminders: function(){
+        GM_setValue('strReminder', JSON.stringify(Reminder.jsonReminder));
+    },
+    getReminders: function(){
+        return JSON.stringify(Reminder.jsonReminder);
+    }
+ };
+
+var remndr = Reminder;
+
+if(strLoc.indexOf('guide.html')!==-1){
+
 	//if it's opera, we fix the display bug
 	if(window.opera) {
 		var f = getElementByClass('filters');
 		var parentdiv = f.parentNode;
 		parentdiv.removeChild(f);
 		document.getElementById('filters').appendChild(f);
-	}
-	
-}else{
-	if(typeof ScriptUpdater != 'undefined'){
-		ScriptUpdater.check(84836, '0.9.8.4');
-	}
-}
-
-function getElementByClass(theClass) {
-
-	var allHTMLTags=document.body.getElementsByTagName('div');
-	for (i=0; i<allHTMLTags.length; i++) {
-		if (allHTMLTags[i].className==theClass) {
-			return allHTMLTags[i];
-		}
-	}
-}
-
-function savePrefs(obj){
-	var x, child;
-	for(x=0;x<obj.children.length;x++){
-		child = obj.children[x];
-		if(child.nodeName == 'INPUT'){
-			switch(child.type){
-				case 'text':
-					if(GM_getValue(child.id, prefs[child.id].defaultt)!=child.value){
-						GM_setValue(child.id, child.value);
-					}
-					break;
-				case 'checkbox':
-					if(GM_getValue(child.id, prefs[child.id].defaultt)!=child.checked){
-						GM_setValue(child.id, child.checked);
-					}
-					break;
-				default:
-					break;
-			}
-		}
-	}
-	window.location = window.location.href; //reload page
-}
-
-function printPrefs(def){
-	var temp = ' ';
-	var realValue, x;
-	//if(prefs.length>0){
-		for (x in prefs){
-			realValue = GM_getValue(prefs[x].name, prefs[x].defaultt);
-			temp += '<label for="'+prefs[x].name+'">'+prefs[x].DisplayName+'</label><input id="'+prefs[x].name+'" type="'+prefs[x].type+'"';
-			switch(prefs[x].type){
-				case 'text':
-					temp += ' value="'+realValue+'" maxlength="'+ prefs[x].size +'" size="'+ prefs[x].size +'" /><br />';
-					break;
-				case 'checkbox':
-					realValue = (realValue==true) ? 'checked="checked" ' : null;
-					temp += ' value="'+prefs[x].name+'" '+realValue+'/><br />';
-					break;
-				default:
-					temp += ' /><br />';
-					break;
-			}
-		}
-		temp += '<div id="NG3_buttons"><a id="savePrefs">Save</a> <a id="closePrefs">Close</a></div>';
-	//}
-	return temp;
-}
-
-function openPrefs(){
-	if(!(document.getElementById('boxPrefs'))){
-		var myDiv = document.createElement('div');
-		myDiv.id = 'boxPrefs';
-		myDiv.innerHTML = '<div id="NG3_boxPrefs" style=""><div id="NG3_header">TVCatchup Script Preferences</div><div id="NG3_main">'+printPrefs()+'</div></div>';
-		document.body.appendChild(myDiv);
-		
-		document.getElementById('savePrefs').addEventListener("click", function (){ savePrefs(this.parentNode.parentNode); }, false);
-		document.getElementById('closePrefs').addEventListener("click", function (){ closePrefs(this.parentNode.parentNode); }, false);
 	}else{
-		closePrefs();
-	}
-}
+        //ugh can't do the update in opera
+        //check for update after everything is done loading
+        Updater.checkForUpdate();
+    }
 
-function closePrefs(){
-	var prntDiv = document.body;
-	var chldDiv = document.getElementById('boxPrefs');
-	prntDiv.removeChild(chldDiv);
-}
+    function calcWidth(){//for the timeline
+        var timeStart = trim(document.getElementById('timeline').children[1].textContent);
 
-function ev(xpa){
-	var snapLink = document.evaluate(xpa, document, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
-	if(snapLink.snapshotLength>0){
-		return snapLink;
-	}else{
-		return null;
-	}
-}
-function formatTime(time){
-	if(time<10) time = "0" + time;
-	return time;
-}
-/*http://blog.stevenlevithan.com/archives/faster-trim-javascript*/
-function trim (str) {
-	var	str = str.replace(/^\s\s*/, ''),
-		ws = /\s/,
-		i = str.length;
-	while (ws.test(str.charAt(--i)));
-	return str.slice(0, i + 1);
-}
+        var timeStartS = timeStart.split(":");
+        var newDate = new Date();
+        newDate.setHours(parseInt(timeStartS[0], 10),parseInt(timeStartS[1], 10),0,0);
+        if(newDate.getHours>d.getHours()) newDate.setDate(newDate.getDate-1);
 
-var bTimeLeft = GM_getValue('timeLeft', prefs['timeLeft'].defaultt);
-var bImdbLink = GM_getValue('imdbLink', prefs['imdbLink'].defaultt);
-var bRedLine = GM_getValue('redLine', prefs['redLine'].defaultt);
-var strTextColor = GM_getValue('textColor', prefs['textColor'].defaultt);
+        var timeBetween = new Date(d.getTime()-newDate.getTime());
+        var totalmin = (timeBetween.getHours()*60) + timeBetween.getMinutes();
 
-var d = new Date();
+        if(totalmin<250){return (totalmin*4)+65;}
+        else{return 0;}
+    }
 
-function calcWidth(){
-	var timeStart = trim(document.getElementById('timeline').children[1].textContent);
-	
-	var timeStartS = timeStart.split(":");
-	var newDate = new Date();
-	newDate.setHours(parseInt(timeStartS[0], 10),parseInt(timeStartS[1], 10),0,0);
-	if(newDate.getHours>d.getHours()) newDate.setDate(newDate.getDate-1);
-	
-	var timeBetween = new Date(d.getTime()-newDate.getTime());
-	var totalmin = (timeBetween.getHours()*60) + timeBetween.getMinutes();
-	
-	if(totalmin<250){return (totalmin*4)+65;}
-	else{return 0;}
-}
 
-GM_addStyle('#NG3_boxPrefs{color:#fff; left:10px; top:10px; position:fixed; width:auto; height:auto; padding:0 0 10px 0; background:#3B3B3B; display:block; text-align:center; border:2px solid #777; z-index:100;}\
-#NG3_header{background:#777; margin:0 0 5px 0; font-weight:bold;}\
-#NG3_main{text-align:left; margin:0 5px 0 5px;}\
-#NG3_buttons{text-align:left;}\
-#NG3_buttons a{cursor:pointer;}\
-#NG3_buttons a:hover{text-decoration:underline;}\
-.NG3_custlink{color:#'+strTextColor+';}\
-.NG3_custlink a{color:#'+strTextColor+'; text-decoration:underline;}\
-.NG3_custlink a:hover{text-decoration:none;}');
+    var snapPanels, z, timeLeft, timeEnd, hours, minutes, shtml, temp, title, divTemp;
 
-var snapPanels, z, timeLeft, timeEnd, hours, minutes, shtml, temp, title, divTemp;
-var curTime = d.getTime();
+    function formatProgramme(ob){
+        divTemp = document.createElement('div');
+        divTemp.setAttribute('class', 'subtitle '+PREFIX+'custlink');
 
-if(bTimeLeft || bImdbLink || bRedLine){
-	snapPanels = ev("//div[contains(@style,'images/themes/grey/guide_row_now.png')]");
-	if(snapPanels!=null){
-		for (z = 0; z < snapPanels.snapshotLength; z++) {
-			shtml = snapPanels.snapshotItem(z);			
-			if(shtml.children.length == 1) shtml = shtml.children[0];
-			if(shtml.children.length == 1) shtml = shtml.children[0];
-			
-			if(shtml.children.length >= 5){
-				divTemp = document.createElement('div');
-				divTemp.setAttribute('class', 'subtitle NG3_custlink');
-				
-				if(bTimeLeft){
-					timeEnd = shtml.children[5].textContent;
-					timeLeft = (timeEnd*1000)-(curTime);
-					if(timeLeft>0){
-						timeLeft = new Date(timeLeft);
-						hours = formatTime(timeLeft.getHours());
-						minutes = formatTime(timeLeft.getMinutes());
-					}else{
-						hours = "00";
-						minutes = "00";
-					}
-					divTemp.innerHTML += '[' + hours + ':' + minutes + '] ';
-				}
-				if(bImdbLink){
-					title = encodeURIComponent(trim(shtml.children[0].textContent));
-					divTemp.innerHTML += '[<a href="http://www.imdb.com/find?s=all&q=' + title + '" target="_blank">IMDB</a>]';
-				}
-				shtml.appendChild(divTemp);
-			}
-		}
-		if(bRedLine){
-			GM_addStyle('#NG3_redline{position:absolute; width:1px; height:100%; border-right:1px solid #FF1F1F; left:'+calcWidth()+'px; top:0;}');
-			var divRedLine = document.createElement('div');
-			divRedLine.id = 'NG3_redline';
-			divRedLine.innerHTML = ' ';
-			document.getElementById('grid').appendChild(divRedLine);
-		}
-	}
+        if(bTimeLeft){
+            timeEnd = ob.children[5].textContent;
+            timeLeft = (timeEnd*1000)-(curTime);
+            if(timeLeft>0){
+                timeLeft = new Date(timeLeft);
+                hours = formatTime(timeLeft.getHours());
+                minutes = formatTime(timeLeft.getMinutes());
+            }else{
+                hours = "00";
+                minutes = "00";
+            }
+            divTemp.innerHTML += '[' + hours + ':' + minutes + '] ';
+        }
+        if(bImdbLink){
+            title = encodeURIComponent(trim(ob.children[0].textContent));
+            divTemp.innerHTML += '[<a href="http://www.imdb.com/find?s=all&q=' + title + '" target="_blank">IMDB</a>]';
+        }
+        ob.appendChild(divTemp);
+    }
+
+
+    if(bTimeLeft || bImdbLink || bReminder){
+        if(bReminder) snapPanels = ev("//div[contains(@class,'programme') and not(@class='programmes')]");
+        else snapPanels = ev("//div[contains (@style,'images/themes/grey/guide_row_now.png')]");
+        //console.debug(remndr.getReminders());
+        remndr.removeStartedReminders();
+        //console.debug(remndr.getReminders());
+        //console.debug(snapPanels);
+        if(snapPanels!=null){
+            for (z = 0; z < snapPanels.snapshotLength; z++) {
+                shtml = snapPanels.snapshotItem(z);
+                sback = shtml;
+                if(shtml.children.length == 1) shtml = shtml.children[0];
+                if(shtml.children.length == 1) shtml = shtml.children[0];
+
+                if(shtml.children.length >= 5){
+                    if(sback.style.backgroundImage.indexOf('guide_row_now.png') != -1){
+                        //on right now
+                        formatProgramme(shtml);
+                    }else{
+                        if(bReminder) remndr.addReminderLink(shtml);
+                    }
+                }
+                //url("http://images-cache.tvcatchup.com/NEW/images/themes/grey/guide_row_now.png")
+            }
+        }
+    }
+
+    if(bRedLine){
+        GM_addStyle('#'+PREFIX+'redline{position:absolute; width:1px; height:100%; border-right:1px solid #FF1F1F; left:'+calcWidth()+'px; top:0;}');
+        var divRedLine = document.createElement('div');
+        divRedLine.id = PREFIX+'redline';
+        divRedLine.innerHTML = ' ';
+        document.getElementById('grid').appendChild(divRedLine);
+    }
+
+
+}else if(strLoc.indexOf('watch.html')!==-1 && bReminder){
+    remndr.scheduleReminder();
 }
 
 var prefsLink = document.getElementById('user');
@@ -286,9 +571,11 @@ if(prefsLink != null){
 	var divPrefsLink = document.createElement('a');
 	divPrefsLink.setAttribute('style', 'cursor:pointer;');
 	divPrefsLink.id = 'openPrefs';
-	divPrefsLink.innerHTML = ' | TVCE Options';
+	divPrefsLink.innerHTML = 'TVCE Options';
+
+    prefsLink.innerHTML += ' | ';
 	prefsLink.appendChild(divPrefsLink);
 	//document.getElementById('openPrefs').addEventListener("click", function (){ openPrefs(); }, false);
-	divPrefsLink.addEventListener("click", function (){ openPrefs(); }, false);
+	divPrefsLink.addEventListener("click", function (){ Prefrences.openPrefs(); }, false);
 }
 })();
