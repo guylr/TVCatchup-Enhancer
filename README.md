@@ -7,9 +7,9 @@ This script adds various features to TVCatchup's website. I will add new feature
 
 Tested on:
 
-    Firefox 3.6.10, 4.0b9pre
-    Chrome 8.0.552.224
-    Opera 10.63, 11.00
+    Firefox 7
+    Chrome 15
+    Opera 11.52
 
 Features
 --------
@@ -17,10 +17,12 @@ Features
     Shows time left for the active programme
     Link to IMDB search
     Red time line
+    Reminders
 
 Version History
 ---------------
 
+    0.9.9 - Added reminders, fixed updates(should work on Firefox and Chrome)
     0.9.8.4 - Image location changed, etc
     0.9.8.3 - Image location changed which made the script not work, fixed
     0.9.8.2 - Fixed Opera's display bug, where the time was vertical
