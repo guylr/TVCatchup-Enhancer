@@ -7,9 +7,9 @@ This script adds various features to TVCatchup's website. I will add new feature
 
 Tested on:
 
-    Firefox 7
-    Chrome 15
-    Opera 11.52
+    Firefox 18.0a1
+    Chrome 21.0.1180.89
+    Opera 12.02
 
 Features
 --------
@@ -21,7 +21,8 @@ Features
 
 Version History
 ---------------
-
+    
+    0.9.9.1 - Updated for the new layout, increased red line to 2 pixels and some small fixes.
     0.9.9 - Added reminders, fixed updates(should work on Firefox and Chrome)
     0.9.8.4 - Image location changed, etc
     0.9.8.3 - Image location changed which made the script not work, fixed
