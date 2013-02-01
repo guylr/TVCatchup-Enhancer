@@ -2,7 +2,13 @@
 // @name           TVCatchup Enhancer
 // @namespace      http://www.networkg3.com/gmscripts
 // @description    Adds various features to TVCatchup's website
-// @version        0.9.9
+// @grant          GM_getValue
+// @grant          GM_setValue
+// @grant          GM_addStyle
+// @grant          GM_xmlhttpRequest
+// @grant          GM_deleteValue
+// @version        0.9.9.1
+// @history        0.9.9.1 Updated for the new layout, increased red line to 2 pixels and some small fixes. ------CHROME USERS: please visit homepage or the thread in forums for instruction on how to install this script!!!
 // @history        0.9.9 Added reminders, fixed updates(should work on Firefox and Chrome), graphics updated
 // @history        0.9.8.4 Image location changed, etc
 // @history        0.9.8.3 Image location changed which made the script not work, fixed
@@ -156,7 +162,7 @@ var Prefrences = {
                 temp += '<label for="'+prefs[x].name+'">'+prefs[x].DisplayName+'</label><input id="'+prefs[x].name+'" type="'+prefs[x].type+'"';
                 switch(prefs[x].type){
                     case 'text':
-                        temp += ' value="'+realValue+'" maxlength="'+ prefs[x].size +'" size="'+ prefs[x].size +'" /><br />';
+                        temp += ' value="'+realValue.replace(/&/g, "").replace(/>/g, "").replace(/</g, "").replace(/"/g, "")+'" maxlength="'+ prefs[x].size +'" size="'+ prefs[x].size +'" /><br />';
                         break;
                     case 'checkbox':
                         realValue = (realValue===true) ? 'checked="checked" ' : '';
@@ -170,19 +176,6 @@ var Prefrences = {
         //}
         return temp;
     },
-    /*
-
-    <div id="title">TVCatchup Enhancer is outdated</div>\
-     <div id="content">\
-         <p>A new version of TVCatchup Enhancer has been released. Please update the script.</p>\
-         <p><b>New version: </b> ' + cvers + '</p>\
-         <p><b>Your current version: </b> '+Updater.curVersion+'</p>\
-         <p><b>Version History:</b><br>\
-             ' + history + '\
-         </p>\
-     </div>\
-     <div id="buttons"><a id="'+PREFIX+'u_update">Update</a> <a id="'+PREFIX+'u_dismiss">Dismiss</a></div>
-     */
     
     openPrefs: function(){
         if(!(document.getElementById(PREFIX+'o_container'))){
@@ -209,7 +202,7 @@ var Prefrences = {
 
 var Updater = {
     id: 84836,
-    curVersion: '0.9.9',
+    curVersion: '0.9.9.1',
     lastUpdate: parseInt(GM_getValue('intLastUpdate', '1310000000')),
     updateEveryHours: 72,
     d: new Date(),
@@ -259,7 +252,7 @@ var Updater = {
         div.innerHTML = '<div class="nround_border ncontainer"><div class="nround_border title">TVCatchup Enhancer is outdated</div>\
                          <div class="content">\
                              <p>A new version of TVCatchup Enhancer has been released. <br/> Please update the script. <br/>\
-                             <b>Script homepage:</b> <a href="http://userscripts.org/scripts/show/' + Updater.id + '">http://userscripts.org/scripts/show/' + Updater.id + '</a></p>\
+                             <b>Script homepage:</b> <a target="_blank" href="http://userscripts.org/scripts/show/' + Updater.id + '">http://userscripts.org/scripts/show/' + Updater.id + '</a></p>\
                              <p><b>New version: </b> <span class="gray">' + cvers + '</span></p>\
                              <p><b>Your current version: </b> <span class="gray">'+Updater.curVersion+'</span></p>\
                              <p><b>Version History:</b><br><span class="gray">\
@@ -315,7 +308,7 @@ GM_addStyle('.nround_border{-moz-border-radius:6px;-webkit-border-radius:6px;-kh
 .'+PREFIX+'reminder_close{cursor:pointer; float:right; margin:4px 5px 5px 0; width:10px; height:11px; \
                     background-image: url(http://i.imgur.com/r3A2O.png);}\
 .'+PREFIX+'reminder_container{width:100%; height:100%; background-color:#ed3b19; color:#fff; padding:5px 0 5px 0; \
-                        text-shadow: 1px 1px 0px #832817; border-top:4px solid #000; font-style:italic;}\
+                        text-shadow: 1px 1px 0px #832817; border-top:4px solid #000; font-style:italic; text-align:center;}\
 .'+PREFIX+'reminder_container a{color:#ffffa6;}\
 .'+PREFIX+'reminder_container a:hover{color:#fff;}');
 
@@ -471,7 +464,7 @@ var remndr = Reminder;
 
 if(strLoc.indexOf('guide.html')!==-1){
 
-	//if it's opera, we fix the display bug
+	//if it's opera, we fix the display bug - don't really need it anymore for the current opera version, will leave it incase it still messes up for users with older versions
 	if(window.opera) {
 		var f = getElementByClass('filters');
 		var parentdiv = f.parentNode;
@@ -548,17 +541,17 @@ if(strLoc.indexOf('guide.html')!==-1){
                         if(bReminder) remndr.addReminderLink(shtml);
                     }
                 }
-                //url("http://images-cache.tvcatchup.com/NEW/images/themes/grey/guide_row_now.png")
             }
         }
     }
 
     if(bRedLine){
-        GM_addStyle('#'+PREFIX+'redline{position:absolute; width:1px; height:100%; border-right:1px solid #FF1F1F; left:'+calcWidth()+'px; top:0;}');
+        GM_addStyle('#'+PREFIX+'redline{position:absolute; width:1px; border-right:2px solid #FF1F1F; left:'+calcWidth()+'px; top:0; bottom:0;}');
         var divRedLine = document.createElement('div');
         divRedLine.id = PREFIX+'redline';
         divRedLine.innerHTML = ' ';
-        document.getElementById('grid').appendChild(divRedLine);
+		document.getElementById('programmes').style.position = 'relative';
+        document.getElementById('programmes').appendChild(divRedLine);
     }
 
 
@@ -568,14 +561,11 @@ if(strLoc.indexOf('guide.html')!==-1){
 
 var prefsLink = document.getElementById('user');
 if(prefsLink != null){
-	var divPrefsLink = document.createElement('a');
-	divPrefsLink.setAttribute('style', 'cursor:pointer;');
+	var divPrefsLink = document.createElement('li');
 	divPrefsLink.id = 'openPrefs';
-	divPrefsLink.innerHTML = 'TVCE Options';
+	divPrefsLink.innerHTML = ' | TVCE Options';
 
-    prefsLink.innerHTML += ' | ';
-	prefsLink.appendChild(divPrefsLink);
-	//document.getElementById('openPrefs').addEventListener("click", function (){ openPrefs(); }, false);
+	prefsLink.firstChild.appendChild(divPrefsLink);
 	divPrefsLink.addEventListener("click", function (){ Prefrences.openPrefs(); }, false);
 }
 })();
